@@ -1,0 +1,43 @@
+#!/bin/sh
+AGENT='-AMozilla/5.0 (iPad; CPU OS 7_0 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11A465 Safari/9537.53'
+playlist="$(
+	curl --progress-bar "$AGENT" "$1" \
+	| egrep -o 'data-media="[^"]+"' \
+	| sed -e 's/^data-media="//' -e 's/"$//'
+)"
+subtitle="$(
+	echo "$playlist" \
+	| sed -e 's/^.*cc1=uri%3D//' -e 's/\%7E.*$//' -e 's/%3a/:/g' -e 's_%2f_/_g'
+)"
+
+stream="$(dirname "$playlist")/$(curl "$AGENT" --progress-bar "$playlist")"
+stream="$(
+	curl "$AGENT" --progress-bar "$playlist" \
+	| grep -v '^#' \
+	| tail -n2 \
+	| head -n1
+)"
+
+if [ "$subtitle" ]
+then
+	ffmpeg -i "$subtitle" "$2.raw.srt"
+	php -r '
+		$timeframe = "";
+		$readNew = true;
+		$readNumber = false;
+		$skipping = false;
+		foreach(file("php://stdin") as $line) {
+			if ($readNumber)
+				$skipping = $timeframe == trim($line);
+			if (!$skipping)
+				echo $line;
+			if ($readNumber) $timeframe = trim($line);
+			$readNumber = $readNew && intval($line) == trim($line);
+			$readNew = !trim($line);
+		}
+	' < "$2.raw.srt" > "$2.conv.srt" 
+	ffmpeg -i "$stream" -i "$2.conv.srt" -acodec copy -vcodec copy -scodec mov_text -bsf:a aac_adtstoasc "$2"
+	rm "$2.raw.srt" "$2.conv.srt"
+else
+	ffmpeg -i "$stream" -acodec copy -vcodec copy -bsf:a aac_adtstoasc "$2"
+fi
