@@ -10,7 +10,6 @@ subtitle="$(
 	| sed -e 's/^.*cc1=uri%3D//' -e 's/\%7E.*$//' -e 's/%3a/:/g' -e 's_%2f_/_g'
 )"
 
-stream="$(dirname "$playlist")/$(curl "$AGENT" --progress-bar "$playlist")"
 stream="$(
 	curl "$AGENT" --progress-bar "$playlist" \
 	| grep -v '^#' \
@@ -18,8 +17,10 @@ stream="$(
 	| head -n1
 )"
 
-if [ "$subtitle" ]
+if [ "$subtitle" = "$playlist" ]
 then
+	ffmpeg -i "$stream" -acodec copy -vcodec copy -bsf:a aac_adtstoasc "$2"
+else
 	ffmpeg -i "$subtitle" "$2.raw.srt"
 	php -r '
 		$timeframe = "";
@@ -38,6 +39,4 @@ then
 	' < "$2.raw.srt" > "$2.conv.srt" 
 	ffmpeg -i "$stream" -i "$2.conv.srt" -acodec copy -vcodec copy -scodec mov_text -bsf:a aac_adtstoasc "$2"
 	rm "$2.raw.srt" "$2.conv.srt"
-else
-	ffmpeg -i "$stream" -acodec copy -vcodec copy -bsf:a aac_adtstoasc "$2"
 fi
